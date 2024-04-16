@@ -1,8 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const app = express();
-// const axios = require('axios');
-const bodyParser = require('body-parser');
+const cors = require('cors');
 const userRoute = require('./routes/user');
 const PORT = process.env.PORT||3000
 const mongoose = require('mongoose');
@@ -14,16 +13,8 @@ mongoose.connect(process.env.MONGO_URL
 .catch(()=>{
   console.log("error connecting database");
 })
-
-app.use(session({
-  secret: 'keyboard cat',
-  resave: false,
-  saveUninitialized: true,
-  // cookie: { secure: true }
-}))
-
+app.use(cors());
 app.use(express.json());
-app.use(bodyParser.json());
 app.use('/',userRoute);
 app.listen(PORT,()=>{
     console.log("server running at port"+PORT);

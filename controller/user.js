@@ -90,22 +90,13 @@ const   login = async (req,res)=>{
 const gettingCard = async (req, res) => {   
     try {
         const username = req.params.username;
-        const token = getToken(req.user);
 
-        const response = await axios.get(`https://api.github.com/users/${username}`, {
-            headers: {
-                Authorization: `token ${token}`
-            }
-        });
-
+        const response = await axios.get(`https://api.github.com/users/${username}`);
         const user = response.data;
-
        
         if (!user) {
             return res.status(404).json({ message: 'User not found or has no repositories.' });
         }
-
-        // Handling user with null name
         if (user.name === null) {
             user.name = 'GitHub';
         }
@@ -158,14 +149,13 @@ const allUsers = async (req, res) => {
                 }
             });
     
-        
             const users = response.data.items.map(user => ({
+                name: user.name || user.login, // Use user.login if user.name is not available
                 login: user.login,
                 avatar_url: user.avatar_url,
                 html_url: user.html_url
             }));
     
-          
             res.status(200).json(users);
         } catch (error) {
             console.error('Error searching users:', error);
@@ -176,7 +166,7 @@ const allUsers = async (req, res) => {
         try {
             const username = req.params.username; // Assuming username is passed as a parameter in the request
             const response = await axios.get(`https://api.github.com/users/${username}/repos`);
-            
+    
             let repositories = response.data.map(repo => ({
                 name: repo.name,
                 description: repo.description || "No Description",
@@ -184,28 +174,83 @@ const allUsers = async (req, res) => {
                 forks: repo.forks,
                 open_issues: repo.open_issues
             }));
-    
-            // Check if sortBy is provided in the request body
-            if (req.body && req.body.sortBy === "name") {
-                console.log("Sorting repositories by name...");
-                repositories.sort((a, b) => a.name.localeCompare(b.name));
-            } else {
-                console.log("No sorting criteria provided or sorting by name is not requested.");
-            }
-            
-            // Now you can send this repository data to the client or render it in your desired format
             res.json(repositories);
         } catch (error) {
             console.error('Error fetching repositories:', error);
             res.status(500).json({ error: 'Error fetching repositories' });
         }
     };
+    const listContributors = async (req, res) => {
+        try {
+            const username = req.params.username;
+            const reponame = req.params.reponame;
+            console.log("Repository:", reponame);
     
-
-    const searchFilter = async(req,res)=>{
-
-    }
-    const logout = (req, res) => {
+            // Fetch contributors for the repository
+            let contributors = {};
+            try {
+                const contributorsResponse = await axios.get(`https://api.github.com/repos/${username}/${reponame}/contributors`);
+                if (Array.isArray(contributorsResponse.data) && contributorsResponse.data.length > 0) {
+                    // Extract contributors and their contributions count
+                    contributors = contributorsResponse.data.reduce((obj, contributor) => {
+                        obj[contributor.login] = contributor.contributions;
+                        return obj;
+                    }, {});
+                } else {
+                    contributors = { "Not available right now": "Not available right now" };
+                }
+            } catch (error) {
+                console.error(`Error fetching contributors for ${reponame}:`, error.message);
+                contributors = { "Not available right now": "Not available right now" };
+            }
+    
+            // Fetch recent commits for the repository
+            let recentCommits = [];
+            try {
+                const commitsResponse = await axios.get(`https://api.github.com/repos/${username}/${reponame}/commits`);
+                recentCommits = commitsResponse.data.map(commit => ({
+                    message: commit.commit.message,
+                    author: commit.commit.author.name,
+                    date: commit.commit.author.date,
+                }));
+            } catch (error) {
+                console.error(`Error fetching commits for ${reponame}:`, error.message);
+                recentCommits = [{ "message": "Not available right now", "author": "Not available right now", "date": "Not available right now" }];
+            }
+    
+            // Fetch open issues for the repository
+            let openIssues = [];
+            try {
+                const issuesResponse = await axios.get(`https://api.github.com/repos/${username}/${reponame}/issues`);
+                openIssues = issuesResponse.data.map(issue => ({
+                    title: issue.title,
+                    state: issue.state,
+                    author: issue.user.login,
+                    created_at: issue.created_at,
+                }));
+            } catch (error) {
+                console.error(`Error fetching issues for ${reponame}:`, error.message);
+                openIssues = [{ "title": "Not available right now", "state": "Not available right now", "author": "Not available right now", "created_at": "Not available right now" }];
+            }
+    
+            // Combine all data
+            const responseData = {
+                contributors: contributors,
+                commits: recentCommits,
+                issues: openIssues
+            };
+    
+            // Send the retrieved data as JSON response
+            res.status(200).json(responseData);
+        } catch (err) {
+            if (err.response && err.response.status === 404) {
+                return res.status(404).json({ msg: 'Repository not found' });
+            }
+            console.error('Error listing contributors, commits, and issues:', err.message);
+            res.status(500).json({ msg: 'Internal server error' });
+        }
+    };
+        const logout = (req, res) => {
         // Destroy the session
         req.session.destroy((err) => {
             if (err) {
@@ -218,4 +263,4 @@ const allUsers = async (req, res) => {
         });
     };
     
-    module.exports = {signUp,gettingCard,allUsers,login,searchUsers,logout,repositoryTable};
+    module.exports = {signUp,gettingCard,allUsers,login,searchUsers,logout,repositoryTable,listContributors};
